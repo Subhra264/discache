@@ -1,5 +1,5 @@
 use std::hash::Hash;
-pub mod lru_cache;
+pub mod lru;
 
 pub trait Cache<K, V>
 where
