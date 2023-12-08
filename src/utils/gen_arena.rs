@@ -49,35 +49,72 @@ impl<T> GenArena<T> {
         }
     }
 
-    /// Pushes the given `elem` into the arena.
+    pub fn at(&self, index: usize) -> Option<&T> {
+        if index < self.capacity {
+            match &self.elements[index] {
+                GenArenaElem::Occupied(element) => Some(element),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn at_mut(&mut self, index: usize) -> Option<&mut T> {
+        if index < self.capacity {
+            match &mut self.elements[index] {
+                GenArenaElem::Occupied(element) => Some(element),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Pushes the given `elem` into the arena and returns its index.
     ///
     /// Returns Error if the arena is full.
-    pub fn push(&mut self, elem: T) -> Result<(), &'static str> {
+    pub fn push(&mut self, elem: T) -> Result<usize, &'static str> {
         if !self.is_full() {
-            match self.elements[self.free_head.unwrap()] {
+            let free_head = self.free_head.unwrap();
+            match self.elements[free_head] {
                 GenArenaElem::Free { next } => {
-                    self.elements[self.free_head.unwrap()] = GenArenaElem::Occupied(elem);
+                    self.elements[free_head] = GenArenaElem::Occupied(elem);
                     self.free_head = next;
                     self.len += 1;
                 }
-                _ => panic!("Element in the free head must be a Free Element!"),
+                _ => unreachable!(),
             }
+            Ok(free_head)
+        } else {
+            Err("Arena is full!")
         }
-        Err("Arena is full!")
     }
 
     /// Removes the element at the given index.
-    pub fn remove(&mut self, index: usize) {
+    pub fn remove(&mut self, index: usize) -> Option<T> {
         if index < self.capacity {
-            self.elements[index] = if let Some(free_head) = self.free_head {
-                GenArenaElem::Free {
-                    next: Some(free_head),
+            match &self.elements[index] {
+                GenArenaElem::Occupied(_) => {
+                    let free_entry = if let Some(free_head) = self.free_head {
+                        GenArenaElem::Free {
+                            next: Some(free_head),
+                        }
+                    } else {
+                        GenArenaElem::Free { next: None }
+                    };
+                    let removed_bottom = std::mem::replace(&mut self.elements[index], free_entry);
+                    self.free_head = Some(index);
+                    self.len -= 1;
+                    match removed_bottom {
+                        GenArenaElem::Occupied(elem) => Some(elem),
+                        _ => unreachable!(),
+                    }
                 }
-            } else {
-                GenArenaElem::Free { next: None }
-            };
-            self.free_head = Some(index);
-            self.len -= 1;
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 
