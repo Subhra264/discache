@@ -13,6 +13,7 @@ struct Node<T> {
 }
 
 impl<T> DoublyLinkedList<T> {
+    /// Creates a new [`DoublyLinkedList`].
     pub fn new() -> Self {
         DoublyLinkedList {
             arena: GenArena::new(),
@@ -21,6 +22,7 @@ impl<T> DoublyLinkedList<T> {
         }
     }
 
+    /// Creates a new [`DoublyLinkedList`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         DoublyLinkedList {
             arena: GenArena::with_capacity(capacity),
@@ -29,7 +31,8 @@ impl<T> DoublyLinkedList<T> {
         }
     }
 
-    pub fn push(&mut self, elem: T) -> Result<(), &'static str> {
+    /// Pushes the new element to the end of the linked list.
+    pub fn push(&mut self, elem: T) -> Result<usize, &'static str> {
         match self.arena.push(Node {
             value: elem,
             prev: self.tail,
@@ -43,13 +46,14 @@ impl<T> DoublyLinkedList<T> {
                     self.head = Some(index);
                 }
                 self.tail = Some(index);
-                Ok(())
+                Ok(index)
             }
             Err(err) => Err(err),
         }
     }
 
-    pub fn shift(&mut self, elem: T) -> Result<(), &'static str> {
+    /// Puts the new element at the head.
+    pub fn shift_new(&mut self, elem: T) -> Result<usize, &'static str> {
         match self.arena.push(Node {
             value: elem,
             prev: None,
@@ -63,12 +67,41 @@ impl<T> DoublyLinkedList<T> {
                     self.tail = Some(index);
                 }
                 self.head = Some(index);
-                Ok(())
+                Ok(index)
             }
             Err(err) => Err(err),
         }
     }
 
+    /// Shifts the element at the given index to the head.
+    pub fn shift(&mut self, index: usize) {
+        match self.head {
+            Some(head) if head != index => {
+                if let Some(node) = self.arena.at(index) {
+                    let node_prev = node.prev;
+                    let node_next = node.next;
+                    if let Some(prev) = node_prev {
+                        let prev_elem = self.arena.at_mut(prev).unwrap();
+                        prev_elem.next = node_next;
+                    }
+
+                    if let Some(next) = node_next {
+                        let next_elem = self.arena.at_mut(next).unwrap();
+                        next_elem.prev = node_prev;
+                    }
+                }
+
+                if let Some(node) = self.arena.at_mut(index) {
+                    node.prev = None;
+                    node.next = self.head;
+                    self.head = Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Returns the element present at the head.
     pub fn top(&self) -> Option<&T> {
         if let Some(head) = self.head {
             match self.arena.at(head) {
@@ -80,6 +113,7 @@ impl<T> DoublyLinkedList<T> {
         }
     }
 
+    /// Returns the element present at the tail.
     pub fn bottom(&self) -> Option<&T> {
         if let Some(tail) = self.tail {
             match self.arena.at(tail) {
@@ -91,6 +125,7 @@ impl<T> DoublyLinkedList<T> {
         }
     }
 
+    /// Removes the element present at the tail.
     pub fn remove_bottom(&mut self) -> Option<T> {
         if let Some(tail) = self.tail {
             let bottom = self.arena.at(tail).unwrap();

@@ -12,7 +12,7 @@ where
     fn put(&mut self, key: K, value: V) -> Result<(), &'static str>;
 
     /// Returns the stored value against the given key
-    fn get(&self, key: &K) -> Option<&V>;
+    fn get(&mut self, key: &K) -> Option<&V>;
 
     /// When the Cache capacity is filled, this function removes key-value pair
     /// based on different policies.
