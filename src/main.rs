@@ -1,3 +1,5 @@
+use cache::CacheClusterClient;
+
 fn main() {
-    println!("Hello, world!");
+    CacheClusterClient::new().run();
 }
