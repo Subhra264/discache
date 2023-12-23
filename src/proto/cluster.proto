@@ -1,0 +1,27 @@
+syntax = "proto3";
+package cluster;
+
+service Cluster {
+    rpc Put(Entry) returns (PutResponse);
+    rpc Get(Key) returns (GetResponse);
+}
+
+message Entry {
+    string Key = 0;
+    string value = 1;
+}
+
+message PutResponse {
+    uint8 code = 0;
+    optional string message = 1;
+}
+
+message Key {
+    string key = 0;
+}
+
+message GetResponse {
+    uint8 code = 0;
+    optional string value = 1;
+    optional string message = 2;
+}
