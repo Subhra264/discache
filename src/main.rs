@@ -1,5 +1,5 @@
-use cache::CacheClusterClient;
+use cache::CacheClusterServer;
 
 fn main() {
-    CacheClusterClient::new().run();
+    CacheClusterServer::new().run();
 }

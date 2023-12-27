@@ -1,0 +1,8 @@
+syntax = "proto3";
+package api;
+import "cache.proto";
+
+service Cluster {
+    rpc Put(Entry) returns (PutResponse);
+    rpc Get(Key) returns (GetResponse);
+}
