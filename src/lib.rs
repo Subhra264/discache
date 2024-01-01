@@ -1,7 +1,7 @@
 use cache::Cache;
-use network::CacheNetwork;
+use network::{CacheNetwork, ServerNode};
 use rpc::{Entry, GetResponse, Key, PutResponse};
-use std::marker::PhantomData;
+use std::{error::Error, marker::PhantomData};
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Result, Status};
 
@@ -25,7 +25,7 @@ pub struct CacheClusterServer<T = RPCServer>
 where
     T: Server,
 {
-    network: CacheNetwork,
+    network: Mutex<CacheNetwork>,
     pd: PhantomData<T>,
 }
 
@@ -34,10 +34,16 @@ where
     T: Server,
 {
     pub fn new() -> Self {
-        CacheClusterServer {
-            network: CacheNetwork::new(),
+        Self {
+            network: Mutex::new(CacheNetwork::new()),
             pd: PhantomData,
         }
+    }
+
+    pub async fn add_server(&mut self, addr: &str, weight: usize) -> Result<(), impl Error> {
+        let node = ServerNode::parse(addr, weight).unwrap();
+        self.network.lock().await.add_node(node);
+        Ok::<(), network::Error>(())
     }
 }
 
@@ -65,10 +71,27 @@ where
     T: Server,
 {
     pub fn new(cache: C) -> Self {
-        CacheServer::<C, T> {
+        Self {
             cache: Mutex::new(cache),
             pd: PhantomData,
         }
+    }
+}
+
+impl<C> CacheServer<C>
+where
+    C: Cache<String, String> + Send + 'static,
+{
+    pub async fn run(addr: &str, cache: C) -> Result<(), Box<dyn std::error::Error>> {
+        let service = Self::new(cache);
+        let addr = addr.parse().unwrap();
+        use rpc::cache_server::CacheServer;
+        use tonic::transport::Server;
+        Server::builder()
+            .add_service(CacheServer::new(service))
+            .serve(addr)
+            .await?;
+        Ok(())
     }
 }
 
