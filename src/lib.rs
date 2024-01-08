@@ -1,9 +1,9 @@
 use cache::Cache;
-use network::{CacheNetwork, ServerNode};
+use network::CacheNetwork;
 use rpc::{Entry, GetResponse, Key, PutResponse};
-use std::{error::Error, marker::PhantomData};
+use std::marker::PhantomData;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Result, Status};
+use tonic::{async_trait, Request, Response, Result, Status};
 
 pub mod rpc {
     tonic::include_proto!("api");
@@ -20,7 +20,7 @@ pub trait Server {}
 impl Server for RPCServer {}
 impl Server for HTTPServer {}
 
-// RPC server for the Cache Cluster
+/// RPC server for the Cache Cluster
 pub struct CacheClusterServer<T = RPCServer>
 where
     T: Server,
@@ -33,29 +33,48 @@ impl<T> CacheClusterServer<T>
 where
     T: Server,
 {
-    pub fn new() -> Self {
+    pub fn new(network: CacheNetwork) -> Self {
         Self {
-            network: Mutex::new(CacheNetwork::new()),
+            network: Mutex::new(network),
             pd: PhantomData,
         }
-    }
-
-    pub async fn add_server(&mut self, addr: &str, weight: usize) -> Result<(), impl Error> {
-        let node = ServerNode::parse(addr, weight).unwrap();
-        self.network.lock().await.add_node(node);
-        Ok::<(), network::Error>(())
     }
 }
 
 impl CacheClusterServer {
-    pub fn run(&self) {
-        // TODO: Run this client
+    pub async fn run(mut self, addr: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use rpc::cluster_server::ClusterServer;
+        use tonic::transport::Server;
+        self.network.get_mut().connect_nodes().await?;
+        Server::builder()
+            .add_service(ClusterServer::new(self))
+            .serve(addr.parse().unwrap())
+            .await?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl rpc::cluster_server::Cluster for CacheClusterServer {
+    async fn get(&self, request: Request<Key>) -> Result<Response<GetResponse>> {
+        Ok(Response::new(GetResponse {
+            code: 0,
+            value: "".to_string(),
+            message: "success".to_string(),
+        }))
+    }
+
+    async fn put(&self, request: Request<Entry>) -> Result<Response<PutResponse>> {
+        Ok(Response::new(PutResponse {
+            code: 0,
+            message: "success".to_string(),
+        }))
     }
 }
 
 impl CacheClusterServer<HTTPServer> {}
 
-// RPC server for the Cache
+/// RPC server for the Cache
 pub struct CacheServer<C, T = RPCServer>
 where
     C: Cache<String, String>,
@@ -95,7 +114,7 @@ where
     }
 }
 
-#[tonic::async_trait]
+#[async_trait]
 impl<C> rpc::cache_server::Cache for CacheServer<C>
 where
     C: Cache<String, String> + Send + 'static,
