@@ -1,6 +1,6 @@
 use cache::Cache;
 use network::CacheNetwork;
-use rpc::{Entry, GetResponse, Key, PutResponse};
+use rpc::{Entry, GetResponse, Key, PingRequest, Pong, PongResponse, PutResponse, Value};
 use std::marker::PhantomData;
 use tokio::sync::Mutex;
 use tonic::{async_trait, Request, Response, Result, Status};
@@ -56,19 +56,16 @@ impl CacheClusterServer {
 
 #[async_trait]
 impl rpc::cluster_server::Cluster for CacheClusterServer {
-    async fn get(&self, request: Request<Key>) -> Result<Response<GetResponse>> {
+    async fn get(&self, _: Request<Key>) -> Result<Response<GetResponse>> {
         Ok(Response::new(GetResponse {
-            code: 0,
-            value: "".to_string(),
-            message: "success".to_string(),
+            value: Some(Value {
+                value: "".to_string(),
+            }),
         }))
     }
 
-    async fn put(&self, request: Request<Entry>) -> Result<Response<PutResponse>> {
-        Ok(Response::new(PutResponse {
-            code: 0,
-            message: "success".to_string(),
-        }))
+    async fn put(&self, _: Request<Entry>) -> Result<Response<PutResponse>> {
+        Ok(Response::new(PutResponse {}))
     }
 }
 
@@ -125,9 +122,9 @@ where
         let mut cache = self.cache.lock().await;
         match cache.get(&key) {
             Some(value) => Ok(Response::new(GetResponse {
-                code: 0,
-                value: value.clone(),
-                message: "success".to_string(),
+                value: Some(Value {
+                    value: value.clone(),
+                }),
             })),
             None => Err(Status::not_found("key not found")),
         }
@@ -135,13 +132,21 @@ where
 
     async fn put(&self, request: Request<Entry>) -> Result<Response<PutResponse>> {
         let Entry { key, value } = request.into_inner();
-        let mut cache = self.cache.lock().await;
-        match cache.put(key, value) {
-            Ok(()) => Ok(Response::new(PutResponse {
-                code: 0,
-                message: "success".to_string(),
-            })),
-            Err(msg) => Err(Status::internal(msg)),
+        if let (Some(key), Some(value)) = (key, value) {
+            let mut cache = self.cache.lock().await;
+            match cache.put(key.key, value.value) {
+                Ok(()) => Ok(Response::new(PutResponse {})),
+                Err(msg) => Err(Status::internal(msg)),
+            }
+        } else {
+            Err(Status::invalid_argument("key or value not valid!"))
         }
+    }
+
+    async fn ping(&self, _: Request<PingRequest>) -> Result<Response<PongResponse>> {
+        // TODO: Add conditions regarding the health or other relevant situations
+        Ok(Response::new(PongResponse {
+            pong: Pong::Serving.into(),
+        }))
     }
 }
