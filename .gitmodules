@@ -1,0 +1,3 @@
+[submodule "external_lib/xxHash"]
+	path = external_lib/xxHash
+	url = https://github.com/Subhra264/xxHash.git
