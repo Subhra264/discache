@@ -1,8 +1,9 @@
+use crate::{
+    rpc::{self, cache_client::CacheClient},
+    utils::hash::xxhash_64,
+};
 use std::net::{SocketAddr, ToSocketAddrs};
-
 use tonic::transport::Channel;
-
-use crate::rpc::{self, cache_client::CacheClient};
 
 #[derive(Debug)]
 pub enum Error {
@@ -66,6 +67,7 @@ impl CacheNetwork {
 }
 
 pub struct ServerNode {
+    id: u64,
     host: String,
     port: u16,
     weight: usize,
@@ -74,8 +76,15 @@ pub struct ServerNode {
 }
 
 impl ServerNode {
+    fn address_from(mut host: String, port: u16) -> String {
+        host.push_str(&port.to_string());
+        host
+    }
+
     pub fn new(host: String, port: u16, weight: usize) -> Self {
+        let address = Self::address_from(host.clone(), port);
         ServerNode {
+            id: xxhash_64(address.as_str()),
             host,
             port,
             weight,
@@ -100,10 +109,8 @@ impl ServerNode {
         }
     }
 
-    pub fn id(&self) -> String {
-        let mut id = self.host.clone();
-        id.push_str(&self.port.to_string());
-        id
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     pub fn host(&self) -> String {
@@ -112,6 +119,10 @@ impl ServerNode {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn address(&self) -> String {
+        Self::address_from(self.host(), self.port)
     }
 
     pub fn weight(&self) -> usize {
@@ -124,7 +135,7 @@ impl ServerNode {
 
     pub async fn connect(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.client.is_none() {
-            self.client = Some(CacheClient::connect(self.id()).await?);
+            self.client = Some(CacheClient::connect(self.address()).await?);
             self.active = true;
         }
         Ok(())
