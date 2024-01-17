@@ -12,3 +12,5 @@ tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
 tonic-build = "*"
+bindgen = "0.65.1"
+cc = "1.0"
