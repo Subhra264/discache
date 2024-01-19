@@ -1,6 +1,6 @@
 use crate::{
     rpc::{self, cache_client::CacheClient},
-    utils::hash::xxhash_64,
+    utils::hash::{xxhash_64, xxhash_64_with_seed},
 };
 use std::net::{SocketAddr, ToSocketAddrs};
 use tonic::transport::Channel;
@@ -9,6 +9,7 @@ use tonic::transport::Channel;
 pub enum Error {
     NotValidAddress,
     CouldNotConnect(Vec<String>),
+    NoNodesRegistered,
 }
 
 impl std::fmt::Display for Error {
@@ -18,6 +19,7 @@ impl std::fmt::Display for Error {
             Error::CouldNotConnect(ids) => {
                 f.write_fmt(format_args!("Couldn't connect with {:?} servers", ids))
             }
+            Error::NoNodesRegistered => f.write_str("no cache nodes are connected currently"),
         }
     }
 }
@@ -59,10 +61,29 @@ impl CacheNetwork {
         let mut error_ids = vec![];
         for node in &mut self.nodes {
             if node.connect().await.is_err() {
-                error_ids.push(node.id());
+                error_ids.push(node.address());
             }
         }
+        // TODO: Return errors for nodes that couldn't be connected
         Ok(())
+    }
+
+    pub fn find_node_with_key(&self, key: &str) -> Result<usize, Error> {
+        if !self.nodes.is_empty() {
+            let mut node_index = 0;
+            let mut hash: u64 = 0;
+            for (pos, node) in self.nodes.iter().enumerate() {
+                if node.active {
+                    let rendez_hash = xxhash_64_with_seed(key, node.id());
+                    if rendez_hash > hash {
+                        hash = rendez_hash;
+                        node_index = pos;
+                    }
+                }
+            }
+            return Ok(node_index);
+        }
+        Err(Error::NoNodesRegistered)
     }
 }
 
