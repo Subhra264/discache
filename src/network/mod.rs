@@ -1,25 +1,35 @@
 use crate::{
-    rpc::{self, cache_client::CacheClient},
+    rpc::{self, cache_client::CacheClient, Key},
     utils::hash::{xxhash_64, xxhash_64_with_seed},
 };
 use std::net::{SocketAddr, ToSocketAddrs};
-use tonic::transport::Channel;
+use tonic::{transport::Channel, Code, Request};
 
 #[derive(Debug)]
 pub enum Error {
     NotValidAddress,
-    CouldNotConnect(Vec<String>),
+    CouldNotConnectNodes(Vec<String>),
     NoNodesRegistered,
+    NodeCouldNotBeConnected(String),
+    Unknown,
+    EntryNotFound(String),
+    Reason(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::NotValidAddress => f.write_str("given address not valid"),
-            Error::CouldNotConnect(ids) => {
+            Error::CouldNotConnectNodes(ids) => {
                 f.write_fmt(format_args!("Couldn't connect with {:?} servers", ids))
             }
             Error::NoNodesRegistered => f.write_str("no cache nodes are connected currently"),
+            Error::NodeCouldNotBeConnected(addr) => {
+                f.write_fmt(format_args!("Server {} could not be connected", addr))
+            }
+            Error::Unknown => f.write_str("failed due to unknown reason"),
+            Error::EntryNotFound(msg) => f.write_str(&msg),
+            Error::Reason(msg) => f.write_str(&msg),
         }
     }
 }
@@ -84,6 +94,11 @@ impl CacheNetwork {
             return Ok(node_index);
         }
         Err(Error::NoNodesRegistered)
+    }
+
+    pub async fn get_value(&mut self, key: String) -> Result<String, Error> {
+        let node_index = self.find_node_with_key(key.as_str())?;
+        self.nodes[node_index].get(key).await
     }
 }
 
@@ -160,5 +175,25 @@ impl ServerNode {
             self.active = true;
         }
         Ok(())
+    }
+
+    pub async fn get(&mut self, key: String) -> Result<String, Error> {
+        if let Some(conn) = &mut self.client {
+            match conn.get(Request::new(Key { key })).await {
+                Ok(resp) => {
+                    let resp = resp.into_inner();
+                    match resp.value {
+                        Some(value) => Ok(value.value),
+                        None => Err(Error::Unknown),
+                    }
+                }
+                Err(status) => match status.code() {
+                    Code::NotFound => Err(Error::EntryNotFound(status.message().to_string())),
+                    _ => Err(Error::Reason(status.message().to_string())),
+                },
+            }
+        } else {
+            Err(Error::NodeCouldNotBeConnected(self.address()))
+        }
     }
 }
