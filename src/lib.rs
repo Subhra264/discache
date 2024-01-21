@@ -1,5 +1,5 @@
 use cache::Cache;
-use network::{CacheNetwork, Error};
+use network::CacheNetwork;
 use rpc::{Entry, GetResponse, Key, PingRequest, Pong, PongResponse, PutResponse, Value};
 use std::marker::PhantomData;
 use tokio::sync::Mutex;
@@ -57,23 +57,13 @@ impl CacheClusterServer {
 #[async_trait]
 impl rpc::cluster_server::Cluster for CacheClusterServer {
     async fn get(&self, key: Request<Key>) -> Result<Response<GetResponse>> {
-        let key = key.into_inner().key;
-        match self.network.lock().await.get_value(key).await {
-            Ok(value) => Ok(Response::new(GetResponse {
-                value: Some(Value { value }),
-            })),
-            Err(err) => match err {
-                Error::EntryNotFound(msg) => Err(Status::not_found(msg)),
-                Error::NoNodesRegistered | Error::NodeCouldNotBeConnected(_) => {
-                    Err(Status::failed_precondition("nodes couldn't be connected"))
-                }
-                _ => Err(Status::unknown("failed due to unknown reason")),
-            },
-        }
+        let key = key.into_inner();
+        self.network.lock().await.get_value(key).await
     }
 
-    async fn put(&self, _: Request<Entry>) -> Result<Response<PutResponse>> {
-        Ok(Response::new(PutResponse {}))
+    async fn put(&self, entry: Request<Entry>) -> Result<Response<PutResponse>> {
+        let entry = entry.into_inner();
+        self.network.lock().await.put_entry(entry).await
     }
 }
 

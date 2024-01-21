@@ -1,9 +1,9 @@
 use crate::{
-    rpc::{self, cache_client::CacheClient, Key},
+    rpc::{self, cache_client::CacheClient, Entry, GetResponse, Key, PutResponse},
     utils::hash::{xxhash_64, xxhash_64_with_seed},
 };
 use std::net::{SocketAddr, ToSocketAddrs};
-use tonic::{transport::Channel, Code, Request};
+use tonic::{transport::Channel, Request, Response, Status};
 
 #[derive(Debug)]
 pub enum Error {
@@ -96,9 +96,32 @@ impl CacheNetwork {
         Err(Error::NoNodesRegistered)
     }
 
-    pub async fn get_value(&mut self, key: String) -> Result<String, Error> {
-        let node_index = self.find_node_with_key(key.as_str())?;
-        self.nodes[node_index].get(key).await
+    pub async fn get_value(&mut self, key: Key) -> tonic::Result<Response<GetResponse>> {
+        match self.find_node_with_key(&key.key) {
+            Ok(node_index) => self.nodes[node_index].get(key).await,
+            Err(err) => match err {
+                Error::NoNodesRegistered => Err(Status::failed_precondition(
+                    "no cache nodes are connected recently",
+                )),
+                _ => Err(Status::unknown("failed due to unknown reason")),
+            },
+        }
+    }
+
+    pub async fn put_entry(&mut self, entry: Entry) -> tonic::Result<Response<PutResponse>> {
+        if let Some(key) = &entry.key {
+            match self.find_node_with_key(&key.key) {
+                Ok(node_index) => self.nodes[node_index].put(entry).await,
+                Err(err) => match err {
+                    Error::NoNodesRegistered => Err(Status::failed_precondition(
+                        "no cache nodes are connected recently",
+                    )),
+                    _ => Err(Status::unknown("failed due to unknown reason")),
+                },
+            }
+        } else {
+            Err(Status::invalid_argument("key not given"))
+        }
     }
 }
 
@@ -177,23 +200,25 @@ impl ServerNode {
         Ok(())
     }
 
-    pub async fn get(&mut self, key: String) -> Result<String, Error> {
+    pub async fn get(&mut self, key: Key) -> tonic::Result<Response<GetResponse>> {
         if let Some(conn) = &mut self.client {
-            match conn.get(Request::new(Key { key })).await {
-                Ok(resp) => {
-                    let resp = resp.into_inner();
-                    match resp.value {
-                        Some(value) => Ok(value.value),
-                        None => Err(Error::Unknown),
-                    }
-                }
-                Err(status) => match status.code() {
-                    Code::NotFound => Err(Error::EntryNotFound(status.message().to_string())),
-                    _ => Err(Error::Reason(status.message().to_string())),
-                },
-            }
+            conn.get(Request::new(key)).await
         } else {
-            Err(Error::NodeCouldNotBeConnected(self.address()))
+            Err(Status::failed_precondition(format!(
+                "node {} couldn't not be connected",
+                self.address()
+            )))
+        }
+    }
+
+    pub async fn put(&mut self, entry: Entry) -> tonic::Result<Response<PutResponse>> {
+        if let Some(conn) = &mut self.client {
+            conn.put(Request::new(entry)).await
+        } else {
+            Err(Status::failed_precondition(format!(
+                "node {} couldn't not be connected",
+                self.address()
+            )))
         }
     }
 }
