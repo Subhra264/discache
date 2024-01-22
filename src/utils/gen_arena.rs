@@ -29,7 +29,9 @@ impl<T> GenArena<T> {
         new_arena.elements.reserve_exact(new_arena.capacity);
 
         for i in 0..new_arena.capacity {
-            new_arena.elements[i] = GenArenaElem::Free { next: Some(i + 1) };
+            new_arena
+                .elements
+                .push(GenArenaElem::Free { next: Some(i + 1) });
         }
         new_arena.elements[new_arena.capacity - 1] = GenArenaElem::Free { next: None };
         new_arena

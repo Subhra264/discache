@@ -84,7 +84,7 @@ where
     C: Cache<String, String> + Send + 'static,
     T: Server,
 {
-    pub fn new(cache: C) -> Self {
+    fn new(cache: C) -> Self {
         Self {
             cache: Mutex::new(cache),
             pd: PhantomData,
