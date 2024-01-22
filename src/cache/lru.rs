@@ -16,7 +16,7 @@ struct CacheValue<V> {
 
 impl<K, V> Cache<K, V> for LRUCache<K, V>
 where
-    K: Eq + Hash + Copy,
+    K: Eq + Hash + Clone,
 {
     fn new(capacity: usize) -> Self {
         let capacity = if capacity > 0 { capacity } else { 10 };
@@ -51,7 +51,7 @@ where
         if self.map.len() == self.capacity {
             self.evact();
         }
-        match self.lru_order.shift_new(key) {
+        match self.lru_order.shift_new(key.clone()) {
             Ok(index) => {
                 self.map.insert(key, CacheValue { value, index });
                 Ok(())
