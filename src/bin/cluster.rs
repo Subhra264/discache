@@ -1,3 +1,4 @@
+use cache::RPCServer;
 use cache::{network::CacheNetwork, CacheClusterServer};
 use clap::{Parser, ValueEnum};
 use std::fmt::Display;
@@ -44,6 +45,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         nodes.push((node.as_str(), 1 as usize));
     }
     let cache_network = CacheNetwork::with_servers(nodes)?;
-    CacheClusterServer::new(cache_network).run(&addr).await?;
+    CacheClusterServer::<RPCServer>::new(cache_network)
+        .run(&addr)
+        .await?;
     Ok(())
 }

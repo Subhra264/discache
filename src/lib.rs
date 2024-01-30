@@ -1,9 +1,12 @@
+use actix_web::{web, App, HttpServer};
 use cache::Cache;
 use network::CacheNetwork;
 use rpc::{Entry, GetResponse, Key, PingRequest, Pong, PongResponse, PutResponse, Value};
+use std::error::Error;
 use std::marker::PhantomData;
 use tokio::sync::Mutex;
 use tonic::{async_trait, Request, Response, Result, Status};
+use utils::actix_api::cluster_get;
 
 pub mod rpc {
     tonic::include_proto!("api");
@@ -42,7 +45,7 @@ where
 }
 
 impl CacheClusterServer {
-    pub async fn run(mut self, addr: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(mut self, addr: &str) -> Result<(), Box<dyn Error>> {
         use rpc::cluster_server::ClusterServer;
         use tonic::transport::Server;
         self.network.get_mut().connect_nodes().await?;
@@ -67,7 +70,22 @@ impl rpc::cluster_server::Cluster for CacheClusterServer {
     }
 }
 
-impl CacheClusterServer<HTTPServer> {}
+impl CacheClusterServer<HTTPServer> {
+    pub async fn run(self, addr: &str) -> Result<(), Box<dyn Error>> {
+        let cluster_data = web::Data::new(self);
+
+        HttpServer::new(move || {
+            App::new()
+                .app_data(cluster_data.clone())
+                .service(cluster_get)
+        })
+        .bind(addr)?
+        .run()
+        .await?;
+
+        Ok(())
+    }
+}
 
 /// RPC server for the Cache
 pub struct CacheServer<C, T = RPCServer>
@@ -96,7 +114,7 @@ impl<C> CacheServer<C>
 where
     C: Cache<String, String> + Send + 'static,
 {
-    pub async fn run(addr: &str, cache: C) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(addr: &str, cache: C) -> Result<(), Box<dyn Error>> {
         let service = Self::new(cache);
         let addr = addr.parse().unwrap();
         use rpc::cache_server::CacheServer;
