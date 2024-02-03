@@ -6,7 +6,7 @@ use std::error::Error;
 use std::marker::PhantomData;
 use tokio::sync::Mutex;
 use tonic::{async_trait, Request, Response, Result, Status};
-use utils::actix_api::cluster_get;
+use utils::http;
 
 pub mod rpc {
     tonic::include_proto!("api");
@@ -77,7 +77,8 @@ impl CacheClusterServer<HTTPServer> {
         HttpServer::new(move || {
             App::new()
                 .app_data(cluster_data.clone())
-                .service(cluster_get)
+                .service(http::cluster::get)
+                .service(http::cluster::save)
         })
         .bind(addr)?
         .run()
